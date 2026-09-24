@@ -11,6 +11,10 @@ const activeConversationId = ref(null);
 const loading = ref(false);
 const loadingConversations = ref(false);
 
+// Delete confirmation modal
+const showDeleteModal = ref(false);
+const pendingDeleteId = ref(null);
+
 const messagesContainer = ref(null);
 
 async function loadConversations() {
@@ -154,7 +158,14 @@ async function refreshConversationList() {
 }
 
 async function deleteConversation(conversationId) {
-  if (!confirm("Delete this conversation?")) return;
+  pendingDeleteId.value = conversationId;
+  showDeleteModal.value = true;
+}
+
+async function confirmDelete() {
+  const conversationId = pendingDeleteId.value;
+  showDeleteModal.value = false;
+  pendingDeleteId.value = null;
 
   try {
     const res = await fetch(`${API_URL}/conversations/${conversationId}`, {
@@ -178,6 +189,11 @@ async function deleteConversation(conversationId) {
   } catch (error) {
     console.error("Failed to delete conversation:", error);
   }
+}
+
+function cancelDelete() {
+  showDeleteModal.value = false;
+  pendingDeleteId.value = null;
 }
 
 function scrollToBottom() {
@@ -383,6 +399,50 @@ onMounted(() => {
         <p class="input-hint">TARO can make mistakes. Verify important info.</p>
       </div>
     </section>
+
+    <!-- ── DELETE MODAL ── -->
+    <Transition name="modal">
+      <div
+        v-if="showDeleteModal"
+        class="modal-backdrop"
+        @click.self="cancelDelete"
+      >
+        <div class="modal">
+          <div class="modal-icon">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path
+                d="M8 4h6M3 7h16M5 7l1 11a2 2 0 002 2h6a2 2 0 002-2l1-11"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M9 11v4M13 11v4"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+              />
+            </svg>
+          </div>
+          <div class="modal-body">
+            <h3 class="modal-title">Delete conversation?</h3>
+            <p class="modal-desc">
+              This can't be undone. The conversation and all its messages will
+              be permanently removed.
+            </p>
+          </div>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--cancel" @click="cancelDelete">
+              Cancel
+            </button>
+            <button class="modal-btn modal-btn--confirm" @click="confirmDelete">
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </main>
 </template>
 
@@ -960,5 +1020,118 @@ onMounted(() => {
   .input-area {
     padding: 8px 12px 16px;
   }
+}
+
+/* ─── Delete modal ─────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 6, 18, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.modal {
+  width: min(400px, calc(100vw - 40px));
+  background: #1a1428;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 28px 28px 24px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.modal-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: rgba(220, 70, 90, 0.12);
+  color: #e06878;
+}
+
+.modal-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #f0e8f8;
+  letter-spacing: -0.2px;
+}
+
+.modal-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #7a6a8a;
+  line-height: 1.55;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 10px 22px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.modal-btn--cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: #9a8aaa;
+}
+
+.modal-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c4b4d4;
+}
+
+.modal-btn--confirm {
+  background: rgba(220, 70, 90, 0.15);
+  color: #e06878;
+  border: 1px solid rgba(220, 70, 90, 0.25);
+}
+
+.modal-btn--confirm:hover {
+  background: rgba(220, 70, 90, 0.25);
+  border-color: rgba(220, 70, 90, 0.45);
+  color: #f08090;
+}
+
+/* Modal transition */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.modal-enter-active .modal,
+.modal-leave-active .modal {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .modal,
+.modal-leave-to .modal {
+  opacity: 0;
+  transform: scale(0.95) translateY(8px);
 }
 </style>
