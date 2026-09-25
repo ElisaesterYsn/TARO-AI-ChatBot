@@ -13,7 +13,8 @@ function onAuthenticated({ token, username }) {
   authToken.value = token;
   authUsername.value = username;
   isAuthenticated.value = true;
-  loadConversations();
+  // Load sidebar list but don't open any conversation — start fresh
+  loadConversations(false);
 }
 
 async function logout() {
@@ -56,7 +57,7 @@ const imageInputRef = ref(null);
 
 const messagesContainer = ref(null);
 
-async function loadConversations() {
+async function loadConversations(openLast = false) {
   loadingConversations.value = true;
 
   try {
@@ -66,7 +67,11 @@ async function loadConversations() {
 
     conversations.value = await res.json();
 
-    if (conversations.value.length > 0 && !activeConversationId.value) {
+    if (
+      openLast &&
+      conversations.value.length > 0 &&
+      !activeConversationId.value
+    ) {
       await openConversation(conversations.value[0].id);
     }
   } catch (error) {
@@ -299,7 +304,7 @@ onMounted(async () => {
         authToken.value = token;
         authUsername.value = data.username;
         isAuthenticated.value = true;
-        await loadConversations();
+        await loadConversations(false);
         return;
       }
     } catch (_) {

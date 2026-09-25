@@ -88,20 +88,17 @@ def google_login():
 
 @router.get("/google/callback")
 def google_callback(code: str = "", error: str = ""):
-    """
-    Google redirects here after the user approves.
-    We exchange the code, get/create the user, then redirect to the
-    frontend with the token in the URL fragment so JS can pick it up.
-    """
     if error or not code:
+        print(f"[TARO Auth] Google denied: {error}")
         return RedirectResponse(f"{FRONTEND_URL}/?auth_error=google_denied")
 
     try:
         user = exchange_google_code(code)
-        # Pass token to frontend via URL fragment — never lands in server logs
         return RedirectResponse(
             f"{FRONTEND_URL}/?token={user['token']}&username={user['username']}"
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[TARO Auth] Google callback error: {e}")
         return RedirectResponse(f"{FRONTEND_URL}/?auth_error=google_failed")

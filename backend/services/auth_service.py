@@ -5,6 +5,16 @@ import secrets
 import urllib.parse
 import urllib.request
 import json
+from pathlib import Path
+
+# Load .env file if it exists (no external deps needed)
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 
 from database.db import get_connection
 
@@ -157,14 +167,18 @@ def exchange_google_code(code: str) -> dict:
     Exchanges the OAuth2 code for tokens, fetches user info,
     and upserts the user. Returns {"id", "username", "email", "token"}.
     """
+    import urllib.error
+
     # Exchange code for access token
-    token_data = urllib.parse.urlencode({
+    token_params = {
         "code": code,
         "client_id": GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "grant_type": "authorization_code",
-    }).encode("utf-8")
+    }
+
+    token_data = urllib.parse.urlencode(token_params).encode("utf-8")
 
     req = urllib.request.Request(
         GOOGLE_TOKEN_URL,
@@ -173,12 +187,16 @@ def exchange_google_code(code: str) -> dict:
         method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        token_response = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            token_response = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise ValueError(f"Google token exchange failed ({e.code}): {body}")
 
     access_token = token_response.get("access_token")
     if not access_token:
-        raise ValueError("Failed to obtain access token from Google.")
+        raise ValueError(f"No access_token in Google response: {token_response}")
 
     # Fetch user info
     info_req = urllib.request.Request(
@@ -186,8 +204,12 @@ def exchange_google_code(code: str) -> dict:
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
-    with urllib.request.urlopen(info_req, timeout=10) as resp:
-        user_info = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(info_req, timeout=10) as resp:
+            user_info = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise ValueError(f"Google userinfo failed ({e.code}): {body}")
 
     google_id = user_info.get("sub")
     email = user_info.get("email", "").lower()
