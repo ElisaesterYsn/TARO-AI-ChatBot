@@ -37,6 +37,26 @@ async function logout() {
   activeConversationId.value = null;
 }
 
+// ─── Sidebar state ────────────────────────────────────────────────────────────
+const sidebarOpen = ref(window.innerWidth > 768);
+const isMobile = ref(window.innerWidth <= 768);
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value;
+}
+
+function closeSidebarOnMobile() {
+  if (isMobile.value) sidebarOpen.value = false;
+}
+
+// Update on resize
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", () => {
+    isMobile.value = window.innerWidth <= 768;
+    if (window.innerWidth > 768) sidebarOpen.value = true;
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const message = ref("");
@@ -102,6 +122,9 @@ async function createNewChat() {
     activeConversationId.value = conversation.id;
     messages.value = [];
 
+    // Close sidebar on mobile after creating a new chat
+    closeSidebarOnMobile();
+
     await nextTick();
     scrollToBottom();
     return conversation.id;
@@ -122,6 +145,9 @@ async function openConversation(conversationId) {
 
     activeConversationId.value = conversationId;
     messages.value = data.messages || [];
+
+    // Close sidebar on mobile after selecting a conversation
+    closeSidebarOnMobile();
 
     await nextTick();
     scrollToBottom();
@@ -329,8 +355,20 @@ onMounted(async () => {
   />
 
   <main v-else class="app-shell">
+    <!-- ── MOBILE BACKDROP ── -->
+    <Transition name="fade">
+      <div
+        v-if="sidebarOpen && isMobile"
+        class="sidebar-backdrop"
+        @click="toggleSidebar"
+      ></div>
+    </Transition>
+
     <!-- ── SIDEBAR ── -->
-    <aside class="sidebar">
+    <aside
+      class="sidebar"
+      :class="{ open: sidebarOpen, collapsed: !sidebarOpen && !isMobile }"
+    >
       <!-- Brand -->
       <div class="sidebar-top">
         <div class="brand">
@@ -418,11 +456,46 @@ onMounted(async () => {
     <section class="chat">
       <!-- Header -->
       <header class="chat-header">
-        <div class="header-title">
-          {{
-            conversations.find((c) => c.id === activeConversationId)?.title ||
-            "TARO"
-          }}
+        <div class="header-left">
+          <!-- Sidebar toggle button -->
+          <button
+            class="sidebar-toggle"
+            @click="toggleSidebar"
+            :title="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect
+                x="1"
+                y="3"
+                width="14"
+                height="1.5"
+                rx="0.75"
+                fill="currentColor"
+              />
+              <rect
+                x="1"
+                y="7.25"
+                width="9"
+                height="1.5"
+                rx="0.75"
+                fill="currentColor"
+              />
+              <rect
+                x="1"
+                y="11.5"
+                width="14"
+                height="1.5"
+                rx="0.75"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+          <div class="header-title">
+            {{
+              conversations.find((c) => c.id === activeConversationId)?.title ||
+              "TARO"
+            }}
+          </div>
         </div>
         <div class="header-status">
           <span class="pulse"></span>
@@ -1284,30 +1357,150 @@ onMounted(async () => {
   color: #b8a8c8;
 }
 
-/* ─── Responsive ───────────────────────────── */
+/* ─── Responsive & collapsible sidebar ─────── */
 
-@media (max-width: 720px) {
+/* Backdrop for mobile drawer */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(5, 2, 12, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Toggle button in header */
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #7a6a8a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(200, 96, 160, 0.12);
+  color: #c090d0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Desktop: sidebar collapses to 0 width (hidden) */
+@media (min-width: 769px) {
   .sidebar {
-    width: 220px;
-    min-width: 220px;
+    width: 260px;
+    min-width: 260px;
+    transition:
+      width 0.25s ease,
+      min-width 0.25s ease,
+      transform 0.25s ease;
+    position: relative;
+    z-index: 50;
+    overflow: hidden;
   }
 
-  .chat-header {
-    padding: 0 20px;
+  .sidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+  }
+
+  /* Hide sidebar content text when collapsed */
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .new-chat-btn,
+  .sidebar.collapsed .conv-list-wrap,
+  .sidebar.collapsed .foot-username,
+  .sidebar.collapsed .logout-btn,
+  .sidebar.collapsed .list-label,
+  .sidebar.collapsed .sidebar-top {
+    opacity: 0;
+    pointer-events: none;
   }
 }
 
-@media (max-width: 580px) {
+/* Tablet & Mobile: sidebar is a fixed overlay drawer */
+@media (max-width: 768px) {
   .sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    min-width: 280px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .chat {
+    width: 100%;
+  }
+
+  .chat-header {
+    padding: 0 16px;
+    height: 56px;
   }
 
   .messages {
-    padding: 24px 16px 16px;
+    padding: 20px 16px 16px;
   }
 
   .input-area {
     padding: 8px 12px 16px;
+  }
+
+  .welcome-title {
+    font-size: 22px;
+  }
+
+  .welcome-chips {
+    max-width: 100%;
+  }
+
+  .msg-body {
+    max-width: 85%;
+  }
+
+  .header-title {
+    font-size: 14px;
+    max-width: calc(100vw - 160px);
+  }
+}
+
+/* Small mobile */
+@media (max-width: 400px) {
+  .sidebar {
+    width: 100vw;
+    min-width: unset;
+  }
+
+  .msg-body {
+    max-width: 90%;
+  }
+
+  .welcome-title {
+    font-size: 20px;
+  }
+
+  .chip {
+    font-size: 12px;
+    padding: 8px 13px;
   }
 }
 
@@ -1412,6 +1605,17 @@ onMounted(async () => {
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.2s ease;
+}
+
+/* Fade transition (backdrop) */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .modal-enter-active .modal,
