@@ -110,11 +110,17 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             title TEXT NOT NULL DEFAULT 'New Chat',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
+
+    # Migrate: add user_id to conversations if missing
+    _add_column_if_missing(cursor, "conversations", "user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
@@ -133,15 +139,20 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             key TEXT NOT NULL,
             value TEXT NOT NULL,
             type TEXT NOT NULL DEFAULT 'general',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-            UNIQUE(key)
+            UNIQUE(user_id, key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
+
+    # Migrate: add user_id to memories if missing
+    _add_column_if_missing(cursor, "memories", "user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE")
 
     connection.commit()
     connection.close()

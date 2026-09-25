@@ -21,7 +21,7 @@ async function logout() {
   try {
     await fetch(`${API_URL}/auth/logout`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${authToken.value}` },
+      headers: authHeaders(),
     });
   } catch (_) {
     // best-effort
@@ -59,6 +59,14 @@ if (typeof window !== "undefined") {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Returns headers with the Bearer token for authenticated API calls. */
+function authHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${authToken.value}`,
+    ...extra,
+  };
+}
+
 const message = ref("");
 const messages = ref([]);
 const conversations = ref([]);
@@ -81,7 +89,9 @@ async function loadConversations(openLast = false) {
   loadingConversations.value = true;
 
   try {
-    const res = await fetch(`${API_URL}/conversations`);
+    const res = await fetch(`${API_URL}/conversations`, {
+      headers: authHeaders(),
+    });
 
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
 
@@ -105,7 +115,7 @@ async function createNewChat() {
   try {
     const res = await fetch(`${API_URL}/conversations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ title: "New Chat" }),
     });
 
@@ -137,7 +147,9 @@ async function openConversation(conversationId) {
   if (loading.value) return;
 
   try {
-    const res = await fetch(`${API_URL}/conversations/${conversationId}`);
+    const res = await fetch(`${API_URL}/conversations/${conversationId}`, {
+      headers: authHeaders(),
+    });
 
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
 
@@ -221,7 +233,7 @@ async function sendMessage() {
       `${API_URL}/conversations/${conversationId}/messages/stream`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       },
     );
@@ -256,7 +268,9 @@ async function sendMessage() {
 
 async function refreshConversationList() {
   try {
-    const res = await fetch(`${API_URL}/conversations`);
+    const res = await fetch(`${API_URL}/conversations`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
     conversations.value = await res.json();
   } catch (error) {
@@ -277,6 +291,7 @@ async function confirmDelete() {
   try {
     const res = await fetch(`${API_URL}/conversations/${conversationId}`, {
       method: "DELETE",
+      headers: authHeaders(),
     });
 
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
