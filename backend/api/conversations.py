@@ -11,7 +11,14 @@ from services.conversation_service import (
     update_conversation_title,
 )
 
-from services.ai_service import generate_response, stream_response, generate_title, extract_memories
+from services.ai_service import (
+    generate_response,
+    stream_response,
+    stream_response_with_image,
+    generate_title,
+    extract_memories,
+    detect_emotion,
+)
 from services.memory_service import get_memories_as_text, save_memory
 
 
@@ -29,6 +36,7 @@ class CreateConversationResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str
+    image_base64: str | None = None  # optional base64-encoded image for vision
 
 
 @router.post("", response_model=CreateConversationResponse)
@@ -152,97 +160,94 @@ def stream_message(
     conversation = get_conversation(conversation_id)
 
     if conversation is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Conversation not found"
-        )
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     user_message = request.content.strip()
 
     if not user_message:
-        raise HTTPException(
-            status_code=400,
-            detail="Message cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     previous_messages = get_messages(conversation_id)
-
     is_first_message = len(previous_messages) == 0
-
-    # Load all memories and inject into the system prompt
     memory_context = get_memories_as_text()
+    has_image = bool(request.image_base64)
 
     ai_messages = [
-        {
-            "role": message["role"],
-            "content": message["content"],
-        }
-        for message in previous_messages
+        {"role": m["role"], "content": m["content"]}
+        for m in previous_messages
     ]
+    ai_messages.append({"role": "user", "content": user_message})
 
-    ai_messages.append({
-        "role": "user",
-        "content": user_message,
-    })
+    # Emotion detection — fast keyword scan only, no extra Ollama call.
+    # This keeps the streaming path free for the main response.
+    tone = "neutral"
+    if not has_image:
+        tone = detect_emotion(user_message)
+        if tone != "neutral":
+            print(f"[TARO Emotion] Detected: {tone}")
 
-    # Mutable container so the generator can pass the full response
-    # back to the background task after streaming completes
     result: dict = {"full_response": ""}
 
     def generate():
         try:
-            for chunk in stream_response(ai_messages, memory_context=memory_context):
+            if has_image:
+                chunks = stream_response_with_image(
+                    ai_messages,
+                    image_base64=request.image_base64,
+                    memory_context=memory_context,
+                    tone=tone,
+                )
+            else:
+                chunks = stream_response(
+                    ai_messages,
+                    memory_context=memory_context,
+                    tone=tone,
+                )
+
+            for chunk in chunks:
                 result["full_response"] += chunk
                 yield chunk
 
-            # Persist messages as soon as streaming finishes
+            # Persist messages immediately after streaming
             add_message(conversation_id, "user", user_message)
             add_message(conversation_id, "assistant", result["full_response"])
-
-            # Generate title on the first message
-            if is_first_message:
-                try:
-                    title = generate_title(user_message)
-                    update_conversation_title(conversation_id, title)
-                except Exception as error:
-                    print(f"[TARO] Title generation failed: {error}")
 
         except Exception:
             raise
 
-    def run_memory_extraction():
-        """
-        Runs after the StreamingResponse is fully sent to the client.
-        At this point result["full_response"] is complete.
-        """
+    def run_background_tasks():
         full_response = result.get("full_response", "")
-
         if not full_response:
             return
 
-        try:
-            memories = extract_memories(user_message, full_response)
+        # Title generation — only on first message, runs after stream so it
+        # doesn't compete with the main Ollama call
+        if is_first_message:
+            try:
+                title = generate_title(user_message)
+                update_conversation_title(conversation_id, title)
+            except Exception as error:
+                print(f"[TARO] Title generation failed: {error}")
 
-            for memory in memories:
-                save_memory(
-                    key=memory["key"],
-                    value=memory["value"],
-                    type=memory["type"],
-                )
+        # Memory extraction — skip for image messages and very short exchanges
+        # (greetings, one-liners) to avoid unnecessary Ollama calls
+        if not has_image and len(user_message) > 20:
+            try:
+                memories = extract_memories(user_message, full_response)
+                for memory in memories:
+                    save_memory(
+                        key=memory["key"],
+                        value=memory["value"],
+                        type=memory["type"],
+                    )
+                if memories:
+                    print(f"[TARO Memory] Saved {len(memories)} memory/memories.")
+            except Exception as error:
+                print(f"[TARO Memory] Extraction failed: {error}")
 
-            if memories:
-                print(f"[TARO Memory] Saved {len(memories)} new memory/memories.")
+    background_tasks.add_task(run_background_tasks)
 
-        except Exception as error:
-            print(f"[TARO Memory] Extraction failed: {error}")
-
-    # Schedule extraction to run after the response is fully sent
-    background_tasks.add_task(run_memory_extraction)
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/plain"
-    )
+    return StreamingResponse(generate(), media_type="text/plain")
 
 @router.delete("/{conversation_id}")
 def delete_conversation(conversation_id: int):

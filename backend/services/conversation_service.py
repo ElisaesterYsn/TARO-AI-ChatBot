@@ -148,3 +148,27 @@ def update_conversation_title(
 
     connection.commit()
     connection.close()
+
+
+def update_last_assistant_message(conversation_id: int, content: str):
+    """Replaces the content of the most recent assistant message in a conversation."""
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        UPDATE messages
+        SET content = ?
+        WHERE id = (
+            SELECT id FROM messages
+            WHERE conversation_id = ?
+              AND role = 'assistant'
+            ORDER BY id DESC
+            LIMIT 1
+        )
+        """,
+        (content, conversation_id)
+    )
+
+    connection.commit()
+    connection.close()

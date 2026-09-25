@@ -1,3 +1,11 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
   font-family:
     Inter,
@@ -7,9 +15,6 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-
-  color: #27222d;
-  background: #ffffff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,11 +25,10 @@ html,
 body,
 #app {
   width: 100%;
-  min-width: 320px;
   height: 100%;
   margin: 0;
-}
-
-body {
+  padding: 0;
   overflow: hidden;
+  background: transparent;
+  color: inherit;
 }
