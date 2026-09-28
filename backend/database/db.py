@@ -64,6 +64,61 @@ def _migrate_users_table(cursor):
     print("[TARO DB] Users table migration complete.")
 
 
+def _migrate_memories_table(cursor):
+    """
+    Recreates the memories table with UNIQUE(user_id, key) if the old
+    single-column UNIQUE(key) constraint is still in place.
+    Preserves all existing rows.
+    """
+    # Check the existing index constraints
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='memories'")
+    row = cursor.fetchone()
+    if not row:
+        return  # Table doesn't exist yet, nothing to migrate
+
+    table_sql = row[0] or ""
+
+    # If it already has the composite unique, we're done
+    if "UNIQUE(user_id, key)" in table_sql or "unique(user_id, key)" in table_sql.lower():
+        return
+
+    print("[TARO DB] Migrating memories table to UNIQUE(user_id, key)...")
+
+    cursor.execute("PRAGMA foreign_keys = OFF")
+    cursor.execute("ALTER TABLE memories RENAME TO memories_old")
+
+    cursor.execute("""
+        CREATE TABLE memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'general',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            UNIQUE(user_id, key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Copy data — deduplicate by (user_id, key), keeping the most recently updated
+    cursor.execute("""
+        INSERT INTO memories (id, user_id, key, value, type, created_at, updated_at)
+        SELECT id, user_id, key, value, type, created_at, updated_at
+        FROM memories_old
+        WHERE rowid IN (
+            SELECT MAX(rowid)
+            FROM memories_old
+            GROUP BY user_id, key
+        )
+    """)
+
+    cursor.execute("DROP TABLE memories_old")
+    cursor.execute("PRAGMA foreign_keys = ON")
+    print("[TARO DB] Memories table migration complete.")
+
+
 def _add_column_if_missing(cursor, table: str, column: str, definition: str):
     """Adds a non-unique column to an existing table if it doesn't already exist."""
     cursor.execute(f"PRAGMA table_info({table})")
@@ -151,8 +206,25 @@ def init_db():
         )
     """)
 
+    # Migrate memories table — fix UNIQUE constraint to (user_id, key)
+    _migrate_memories_table(cursor)
+
     # Migrate: add user_id to memories if missing
     _add_column_if_missing(cursor, "memories", "user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            conversation_id INTEGER NOT NULL UNIQUE,
+            summary TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        )
+    """)
 
     connection.commit()
     connection.close()

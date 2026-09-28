@@ -27,7 +27,8 @@ Behavior:
 - Answer the user's question directly.
 - Do not unnecessarily repeat the question.
 - Use the conversation history to understand context.
-- Do not claim to remember something unless it appears in the conversation.
+- You have long-term memory. If facts about the user appear in the "What you remember" section below, treat them as true and use them naturally in your replies.
+- If you know the user's name from memory, use it.
 - Do not claim to be constantly learning.
 - Do not invent capabilities you do not have.
 - For simple questions, give a simple answer.
@@ -70,7 +71,7 @@ def generate_response(messages: list[dict]) -> str:
     return response.json()["message"]["content"]
 
 
-def stream_response(messages, memory_context: str = "", tone: str = "neutral"):
+def stream_response(messages, memory_context: str = "", summary_context: str = "", tone: str = "neutral"):
     """
     Streams TARO's response token by token.
 
@@ -80,7 +81,10 @@ def stream_response(messages, memory_context: str = "", tone: str = "neutral"):
     system_content = SYSTEM_PROMPT
 
     if memory_context:
-        system_content += f"\n\nWhat you remember about the user:\n{memory_context}"
+        system_content += f"\n\nWhat you remember about the user (treat these as facts):\n{memory_context}"
+
+    if summary_context:
+        system_content += f"\n\nRecent conversations with this user:\n{summary_context}"
 
     tone_instruction = TONE_INSTRUCTIONS.get(tone, "")
     if tone_instruction:
@@ -117,7 +121,7 @@ def stream_response(messages, memory_context: str = "", tone: str = "neutral"):
             yield content
 
 
-def stream_response_with_image(messages, image_base64: str, memory_context: str = "", tone: str = "neutral"):
+def stream_response_with_image(messages, image_base64: str, memory_context: str = "", summary_context: str = "", tone: str = "neutral"):
     """
     Streams a response using the vision model (llava).
     The image is attached to the last user message.
@@ -125,7 +129,10 @@ def stream_response_with_image(messages, image_base64: str, memory_context: str 
     system_content = SYSTEM_PROMPT
 
     if memory_context:
-        system_content += f"\n\nWhat you remember about the user:\n{memory_context}"
+        system_content += f"\n\nWhat you remember about the user (treat these as facts):\n{memory_context}"
+
+    if summary_context:
+        system_content += f"\n\nRecent conversations with this user:\n{summary_context}"
 
     tone_instruction = TONE_INSTRUCTIONS.get(tone, "")
     if tone_instruction:
@@ -318,22 +325,22 @@ def extract_memories(user_message: str, assistant_response: str) -> list[dict]:
 Given the exchange below, extract any facts about the user that TARO should remember long-term.
 
 Rules:
-- Only extract clear, explicit facts stated by the user — never infer or guess.
-- Ignore greetings, small talk, and one-off questions with no personal relevance.
-- Each memory must have a short key (snake_case, e.g. "user_name"), a concise value, and a type.
+- Extract clear, explicit facts stated by the user — even if mixed with greetings.
+- Focus on: name, age, location, preferences, likes, dislikes, projects, goals, relationships.
+- Each memory must have a short snake_case key (e.g. "user_name"), a concise value, and a type.
 - Valid types: personal, preference, project, general
-- If there is nothing worth remembering, return an empty array.
+- If there is truly nothing factual worth remembering, return an empty array.
 - Return ONLY a valid JSON array — no explanation, no markdown, no extra text.
 
 Examples:
-User: "My name is Elisa"
+User: "Hello! My name is Elisa"
 Output: [{{"key": "user_name", "value": "Elisa", "type": "personal"}}]
+
+User: "Hi, my name is taro. my favorite color is blue."
+Output: [{{"key": "user_name", "value": "taro", "type": "personal"}}, {{"key": "favorite_color", "value": "blue", "type": "preference"}}]
 
 User: "I prefer dark mode"
 Output: [{{"key": "prefers_dark_mode", "value": "true", "type": "preference"}}]
-
-User: "I'm building a project called TARO using Vue and FastAPI"
-Output: [{{"key": "current_project", "value": "TARO — Vue + FastAPI personal AI", "type": "project"}}]
 
 User: "What's 2 + 2?"
 Output: []
@@ -391,6 +398,53 @@ Output:"""
 
     except (json.JSONDecodeError, ValueError):
         return []
+
+
+# ─── Conversation summary ─────────────────────────────────────────────────────
+
+def generate_summary(messages: list[dict]) -> str:
+    """
+    Summarises a full conversation into a compact paragraph TARO can use
+    as context in future conversations.
+
+    messages — list of {"role": "user"|"assistant", "content": str}
+    Returns a plain-text summary string, or "" on failure.
+    """
+    if not messages:
+        return ""
+
+    # Build a readable transcript (cap at last 30 messages to avoid token overflow)
+    transcript_lines = []
+    for m in messages[-30:]:
+        speaker = "User" if m["role"] == "user" else "TARO"
+        transcript_lines.append(f"{speaker}: {m['content'][:400]}")
+
+    transcript = "\n".join(transcript_lines)
+
+    prompt = (
+        "Summarise the following conversation in 3–6 sentences.\n"
+        "Focus on: what the user shared about themselves, what they asked, "
+        "what was decided or learned, and any important facts mentioned.\n"
+        "Write in third person about the user (e.g. 'The user said...').\n"
+        "Output ONLY the summary — no headings, no bullet points.\n\n"
+        f"Conversation:\n{transcript}\n\nSummary:"
+    )
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+            timeout=90,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"].strip()
+    except Exception as e:
+        print(f"[TARO Summary] Generation failed: {e}")
+        return ""
 
 
 # ─── Title generation ─────────────────────────────────────────────────────────

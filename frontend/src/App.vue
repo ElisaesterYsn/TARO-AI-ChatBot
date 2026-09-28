@@ -448,23 +448,6 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-
-      <!-- Footer -->
-      <div class="sidebar-foot">
-        <img src="./assets/taro-logo.png" alt="TARO" class="foot-logo" />
-        <span class="foot-username">{{ authUsername }}</span>
-        <button class="logout-btn" title="Sign out" @click="logout">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h3M9 10l3-3-3-3M12 7H5"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-      </div>
     </aside>
 
     <!-- ── CHAT AREA ── -->
@@ -512,9 +495,28 @@ onMounted(async () => {
             }}
           </div>
         </div>
-        <div class="header-status">
-          <span class="pulse"></span>
-          Online
+        <div class="header-right">
+          <div class="header-user">
+            <span class="header-username">{{ authUsername }}</span>
+            <div class="header-status">
+              <span class="pulse"></span>
+              Online
+            </div>
+          </div>
+          <div class="header-avatar">
+            <img src="./assets/taro-logo.png" alt="TARO" class="logo-img" />
+          </div>
+          <button class="logout-btn" title="Sign out" @click="logout">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h3M9 10l3-3-3-3M12 7H5"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -973,50 +975,7 @@ onMounted(async () => {
 
 /* Footer */
 .sidebar-foot {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 14px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.foot-logo {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  border-radius: 5px;
-  opacity: 0.35;
-  flex-shrink: 0;
-}
-
-.foot-username {
-  flex: 1;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(200, 180, 220, 0.5);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.logout-btn {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(180, 140, 180, 0.4);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.logout-btn:hover {
-  background: rgba(220, 80, 100, 0.15);
-  color: #e06878;
+  display: none;
 }
 
 /* ─── Chat area ────────────────────────────── */
@@ -1059,12 +1018,69 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.header-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.header-username {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e1826;
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .header-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 5px;
+  font-size: 10px;
   color: #9a8aaa;
+}
+
+.header-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 9px;
+  background: rgba(220, 190, 240, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(200, 160, 230, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.logout-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  color: #9a8aaa;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(220, 80, 100, 0.12);
+  color: #e06878;
 }
 
 .pulse {
@@ -1436,8 +1452,6 @@ onMounted(async () => {
   .sidebar.collapsed .brand-text,
   .sidebar.collapsed .new-chat-btn,
   .sidebar.collapsed .conv-list-wrap,
-  .sidebar.collapsed .foot-username,
-  .sidebar.collapsed .logout-btn,
   .sidebar.collapsed .list-label,
   .sidebar.collapsed .sidebar-top {
     opacity: 0;

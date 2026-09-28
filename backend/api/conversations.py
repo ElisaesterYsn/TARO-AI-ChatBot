@@ -17,10 +17,12 @@ from services.ai_service import (
     stream_response,
     stream_response_with_image,
     generate_title,
+    generate_summary,
     extract_memories,
     detect_emotion,
 )
 from services.memory_service import get_memories_as_text, save_memory
+from services.summary_service import save_summary, get_summaries_as_text
 
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
@@ -89,6 +91,7 @@ def stream_message(
     previous_messages = get_messages(conversation_id)
     is_first_message = len(previous_messages) == 0
     memory_context = get_memories_as_text(user_id)
+    summary_context = get_summaries_as_text(user_id, limit=5)
     has_image = bool(request.image_base64)
 
     ai_messages = [
@@ -112,12 +115,14 @@ def stream_message(
                     ai_messages,
                     image_base64=request.image_base64,
                     memory_context=memory_context,
+                    summary_context=summary_context,
                     tone=tone,
                 )
                 if has_image
                 else stream_response(
                     ai_messages,
                     memory_context=memory_context,
+                    summary_context=summary_context,
                     tone=tone,
                 )
             )
@@ -133,18 +138,27 @@ def stream_message(
             raise
 
     def run_background_tasks():
+        import time
         full_response = result.get("full_response", "")
         if not full_response:
             return
+
+        # Small delay so Ollama fully releases from the stream before we call it again
+        time.sleep(1)
 
         if is_first_message:
             try:
                 title = generate_title(user_message)
                 update_conversation_title(conversation_id, title)
+                print(f"[TARO] Title set: {title}")
             except Exception as e:
                 print(f"[TARO] Title generation failed: {e}")
 
-        if not has_image and len(user_message) > 20:
+            # Extra delay between title gen and memory extraction
+            time.sleep(1)
+
+        # Memory extraction — skip for image messages and very short exchanges
+        if not has_image and len(user_message) > 8:
             try:
                 memories = extract_memories(user_message, full_response)
                 for memory in memories:
@@ -155,9 +169,22 @@ def stream_message(
                         type=memory["type"],
                     )
                 if memories:
-                    print(f"[TARO Memory] Saved {len(memories)} memory/memories.")
+                    print(f"[TARO Memory] Saved {len(memories)} memory/memories for user {user_id}: {[m['key'] for m in memories]}")
+                else:
+                    print(f"[TARO Memory] No memories extracted from: '{user_message[:60]}'")
             except Exception as e:
                 print(f"[TARO Memory] Extraction failed: {e}")
+
+        # Conversation summary — generate after a few exchanges to capture context
+        try:
+            all_messages = get_messages(conversation_id)
+            if len(all_messages) >= 3:  # At least user + assistant + user to be worth summarizing
+                summary = generate_summary(all_messages)
+                if summary:
+                    save_summary(user_id, conversation_id, summary)
+                    print(f"[TARO Summary] Updated for conversation {conversation_id}")
+        except Exception as e:
+            print(f"[TARO Summary] Generation failed: {e}")
 
     background_tasks.add_task(run_background_tasks)
 
