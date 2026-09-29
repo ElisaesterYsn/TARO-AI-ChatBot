@@ -91,6 +91,8 @@ def stream_message(
     previous_messages = get_messages(conversation_id)
     is_first_message = len(previous_messages) == 0
     memory_context = get_memories_as_text(user_id)
+    print(f"[TARO Memory] Retrieved for user {user_id}: {repr(memory_context)}")
+    
     summary_context = get_summaries_as_text(user_id, limit=5)
     has_image = bool(request.image_base64)
 

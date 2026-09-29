@@ -23,7 +23,12 @@ def get_all_memories(user_id: int) -> list[dict]:
 
 def get_memories_as_text(user_id: int) -> str:
     """Returns all memories for a user formatted for system prompt injection."""
+    from database.db import DATABASE_PATH
+
     memories = get_all_memories(user_id)
+
+    print(f"[TARO Memory DEBUG] DB: {DATABASE_PATH.resolve()}")
+    print(f"[TARO Memory DEBUG] Raw memories: {memories}")
 
     if not memories:
         return ""
